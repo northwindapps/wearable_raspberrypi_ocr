@@ -1,4 +1,5 @@
 import cv2
+import mediapipe as mp
 import os
 import threading
 from flask import Flask, request
@@ -9,6 +10,11 @@ app = Flask(__name__)
 SAVE_DIR = "captured_images"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
+
+# MediaPipeの初期化
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
+mp_draw = mp.solutions.drawing_utils
 
 def speak_process(text, lang):
     try:

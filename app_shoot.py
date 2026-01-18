@@ -60,7 +60,7 @@ def camera_process():
                 # 距離計算（ログ用）
                 distance_m = 1.0 / current_lens_pos
 
-                if distance_m > 0.40:
+                if distance_m > 0.50:
                     print(f"Skipping: Distance too far (distance: {distance_m:.2f})")
                     last_save_time = current_time
                     continue

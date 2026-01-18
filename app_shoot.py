@@ -2,12 +2,13 @@ import cv2
 import os
 import threading
 import time
+import requests
 from flask import Flask
 
 app = Flask(__name__)
 
 # 保存ディレクトリ作成
-SAVE_DIR = "captured_images"
+SAVE_DIR = "/dev/shm/captured_images"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
@@ -19,7 +20,7 @@ def camera_process():
     
     # 1. 解析速度を稼ぐため 640x480 に設定
     config = picam2.create_preview_configuration(
-        main={"format": "RGB888", "size": (1280, 960)}
+        main={"format": "RGB888", "size": (2304, 1296)} 
     )
     picam2.configure(config)
 
@@ -47,11 +48,22 @@ def camera_process():
             if current_time - last_save_time >= 2.0:
                 # 保存用にBGRに変換 (OpenCVはBGR形式のため)
                 frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                
-                filename = f"{SAVE_DIR}/imx708_{frame_count:05d}.jpg"
+                # filename = f"{SAVE_DIR}/imx708_{frame_count:05d}.jpg"
+                # 固定のファイル名にする（例: current_frame.jpg）
+                filename = f"{SAVE_DIR}/current_frame.jpg"
                 cv2.imwrite(filename, frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                 
                 print(f"Saved: {filename}")
+
+                # 画像をバイナリとして開いて送信
+                url = "http://192.168.23.57:5001/ocr" # MacのIP
+                files = {'imagefile': open(filename, 'rb')}
+                payload = {'imagefile': filename}
+
+                try:
+                    response = requests.post(url, files=files, data=payload)
+                    print(response.json())
+                except Exception as e:                    print(f"Upload failed: {e}")
                 
                 frame_count += 1
                 last_save_time = current_time

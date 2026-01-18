@@ -46,41 +46,49 @@ def camera_process():
             # 3. 「2秒に1枚」のタイミングかチェック
             current_time = time.time()
             if current_time - last_save_time >= 2.0:
-                # 保存用にBGRに変換 (OpenCVはBGR形式のため)
+                
+                # メタデータ取得
+                metadata = picam2.capture_metadata()
+                current_lens_pos = metadata.get('LensPosition', 0)
+
+                # 距離判定：0以下（無限遠）または0.4m(2.5ディオプター)より遠い場合はスキップ
+                if current_lens_pos <= 0:
+                    print("Focus: Infinity or Unknown (Skipping...)")
+                    last_save_time = current_time # 次の2秒後まで待つ
+                    continue
+
+                # 距離計算（ログ用）
+                distance_m = 1.0 / current_lens_pos
+
+                if distance_m > 0.40:
+                    print(f"Skipping: Distance too far (distance: {distance_m:.2f})")
+                    last_save_time = current_time
+                    continue
+
+                print(f"Target detected: {distance_m:.2f}メートル")
+
+                # --- 保存・送信処理 ---
                 frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                # filename = f"{SAVE_DIR}/imx708_{frame_count:05d}.jpg"
-                # 固定のファイル名にする（例: current_frame.jpg）
                 filename = f"{SAVE_DIR}/current_frame.jpg"
                 cv2.imwrite(filename, frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                 
-                print(f"Saved: {filename}")
+                # ファイルを確実に閉じるための with
+                try:
+                    with open(filename, 'rb') as f:
+                        url = "http://192.168.23.57:5001/ocr"
+                        files = {'imagefile': f}
+                        payload = {'filename': filename, 'distance': distance_m}
+                        # タイムアウトを設定してフリーズを防止
+                        response = requests.post(url, files=files, data=payload, timeout=5)
+                        print(f"Server Response: {response.json()}")
+                except Exception as e:                    
+                    print(f"Upload failed: {e}")
+                
+                last_save_time = current_time
 
-                # 撮影の瞬間に現在のレンズ位置を取得
-                # LensPositionは「1 / 距離(m)」に相当する値（ディオプター）です
-                current_lens_pos = picam2.capture_metadata()['LensPosition']
 
-                # 距離（メートル）の概算： 1 / LensPosition
-                if current_lens_pos > 0:
-                    distance_m = 1.0 / current_lens_pos
-                    print(f"推定距離: {distance_m:.2f}メートル")
-
-                    if distance_m < 0.40:
-
-                        # 画像をバイナリとして開いて送信
-                        url = "http://192.168.23.57:5001/ocr" # MacのIP
-                        files = {'imagefile': open(filename, 'rb')}
-                        payload = {'imagefile': filename}
-
-                        try:
-                            response = requests.post(url, files=files, data=payload)
-                            print(response.json())
-                        except Exception as e:                    print(f"Upload failed: {e}")
-                        
-                        frame_count += 1
-                        last_save_time = current_time
-
-                    # CPU負荷を抑えるための微小なスリープ
-                    time.sleep(0.01)
+            # CPU負荷を抑えるための微小なスリープ
+            time.sleep(0.01)
 
     except Exception as e:
         print(f"Error in camera loop: {e}")

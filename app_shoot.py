@@ -64,7 +64,7 @@ def camera_process():
                     distance_m = 1.0 / current_lens_pos
                     print(f"推定距離: {distance_m:.2f}メートル")
 
-                    if distance_m < 0.30:
+                    if distance_m < 0.40:
 
                         # 画像をバイナリとして開いて送信
                         url = "http://192.168.23.57:5001/ocr" # MacのIP

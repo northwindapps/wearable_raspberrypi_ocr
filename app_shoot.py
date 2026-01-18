@@ -30,7 +30,7 @@ def camera_process():
     picam2.set_controls({
         "AfMode": 2,          # オートフォーカス常時
         "AwbMode": 1,         # 1 = Incandescent (電球色/暖かい光)
-        "Saturation": 1.4     # 彩度を少し強調して色の鮮やかさを改善
+        "Saturation": 1.0     # 彩度を少し強調して色の鮮やかさを改善
     })
 
     print("InnoMaker IMX708 Camera Active (AF-Continuous)...")
@@ -55,21 +55,32 @@ def camera_process():
                 
                 print(f"Saved: {filename}")
 
-                # 画像をバイナリとして開いて送信
-                url = "http://192.168.23.57:5001/ocr" # MacのIP
-                files = {'imagefile': open(filename, 'rb')}
-                payload = {'imagefile': filename}
+                # 撮影の瞬間に現在のレンズ位置を取得
+                # LensPositionは「1 / 距離(m)」に相当する値（ディオプター）です
+                current_lens_pos = picam2.capture_metadata()['LensPosition']
 
-                try:
-                    response = requests.post(url, files=files, data=payload)
-                    print(response.json())
-                except Exception as e:                    print(f"Upload failed: {e}")
-                
-                frame_count += 1
-                last_save_time = current_time
+                # 距離（メートル）の概算： 1 / LensPosition
+                if current_lens_pos > 0:
+                    distance_m = 1.0 / current_lens_pos
+                    print(f"推定距離: {distance_m:.2f}メートル")
 
-            # CPU負荷を抑えるための微小なスリープ
-            time.sleep(0.01)
+                    if distance_m < 0.30:
+
+                        # 画像をバイナリとして開いて送信
+                        url = "http://192.168.23.57:5001/ocr" # MacのIP
+                        files = {'imagefile': open(filename, 'rb')}
+                        payload = {'imagefile': filename}
+
+                        try:
+                            response = requests.post(url, files=files, data=payload)
+                            print(response.json())
+                        except Exception as e:                    print(f"Upload failed: {e}")
+                        
+                        frame_count += 1
+                        last_save_time = current_time
+
+                    # CPU負荷を抑えるための微小なスリープ
+                    time.sleep(0.01)
 
     except Exception as e:
         print(f"Error in camera loop: {e}")

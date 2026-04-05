@@ -1,0 +1,2 @@
+ssh {username}@raspberrypi.local
+scp -r /Users/{username}/Documents/wearable_raspberrypi_ocr/* {username}@raspberrypi.local:~/Documents/camera_api/

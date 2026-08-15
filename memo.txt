@@ -1,2 +1,17 @@
 ssh {username}@raspberrypi.local
 scp -r /Users/{username}/Documents/wearable_raspberrypi_ocr/* {username}@raspberrypi.local:~/Documents/camera_api/
+
+--- InnoMaker IMX708 camera setup ---
+1. Edit config:
+   sudo nano /boot/firmware/config.txt
+2. Change:
+   camera_auto_detect=1
+   to:
+   camera_auto_detect=0
+3. Add at the end of the file:
+   dtoverlay=imx708
+4. Save (Ctrl+X, Y, Enter), then reboot:
+   sudo reboot
+5. Verify camera is detected:
+   libcamera-hello -t 0
+   (or rpicam-hello -t 0 on newer OS)

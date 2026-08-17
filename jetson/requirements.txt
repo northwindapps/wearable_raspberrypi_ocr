@@ -1,0 +1,6 @@
+flask
+ollama
+sounddevice
+numpy
+faster-whisper
+openwakeword

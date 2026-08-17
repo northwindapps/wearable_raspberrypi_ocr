@@ -1,0 +1,65 @@
+--- System design ---
+
+Pi Zero (wearable, on glasses):
+  - InnoMaker IMX708 camera, continuous autofocus.
+  - app_shoot.py captures frames, uses LensPosition (focus distance) to
+    decide when something is close enough / in focus to be worth reading.
+  - Only sends a frame to the server when:
+      1. distance <= 0.80m (close enough to be a held page/object)
+      2. camera has been stable for the last few frames (LensPosition
+         spread < threshold) -> avoids sending blurry mid-motion frames
+      3. that stable position differs from the position of the last frame
+         actually sent -> avoids re-sending/re-OCRing the same held page
+         every cycle
+  - Upload runs on a background thread so the camera loop never blocks
+    on the network request.
+
+Server (OCR/TTS "brain", one script per platform under jetson/ mac/ windows/):
+  - Flask endpoint /process receives an image + distance.
+  - Vision-language model (via ollama, e.g. qwen2.5vl:3b) reads the text
+    in the image.
+  - Piper TTS speaks the recognized text back to the user through an
+    earphone.
+  - Platform differences are only in audio playback:
+      jetson  -> aplay (Linux/ALSA)
+      mac     -> afplay
+      windows -> winsound.PlaySound (also needs delete=False temp file,
+                 since Windows won't let piper write to a file that's
+                 still open)
+
+Why Pi Zero + Jetson instead of all-in-one glasses (e.g. Ray-Ban Meta):
+  - Ray-Ban Meta's onboard chip (Snapdragon AR1) is built for low-power
+    camera/audio streaming, not local AI inference -- its "smart"
+    features actually run in Meta's cloud over wifi/phone connection.
+  - This design instead does OCR + TTS fully on-device (Jetson in a bag),
+    trading form factor (bag vs. just glasses) for offline capability
+    and no cloud dependency.
+
+Voice assistant (planned addition, jetson/voice_assistant.py):
+  - Mic lives on the Jetson (USB or Bluetooth), not the Pi Zero.
+  - Always-listening wake word (openWakeWord) triggers a 5s recording.
+  - faster-whisper transcribes the command.
+  - Transcript goes to the same ollama model (text-only chat) for a
+    free-form conversational reply (general assistant, not limited to
+    fixed commands).
+  - Reply is spoken via the same Piper TTS used by process_server.py
+    (shared in jetson/tts.py).
+  - Runs as a separate process from process_server.py; both share the
+    Jetson's GPU, so watch VRAM if OCR and voice command land at the
+    same time.
+  - Open question: one Jetson vs two. Current bet is one Jetson is
+    enough as long as models stay small (STT + 3B VLM), since the wake
+    word listener itself is cheap. Two boards would only be justified
+    by a heavier STT model or a hard requirement that voice commands
+    never wait behind an in-flight OCR call.
+
+Known rough edges / not yet validated on real hardware:
+  - Lens-position thresholds (0.05) in app_shoot.py are guesses, not
+    tuned against real InnoMaker IMX708 sensor logs.
+  - faster-whisper's CUDA build is known to be finicky on Jetson/JetPack;
+    may need to fall back to compute_type="int8" on CPU.
+  - openWakeWord downloads its pretrained wake-word models from GitHub
+    on first run (needs internet once).
+  - voice_assistant.py records a fixed 5s window per command (no
+    silence/VAD cutoff yet) -- cheap first version, same spirit as the
+    lens-diff hack in app_shoot.py.

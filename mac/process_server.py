@@ -1,16 +1,14 @@
 import os
-import subprocess
-import tempfile
 
 import ollama
 from flask import Flask, request
+
+from tts import speak
 
 app = Flask(__name__)
 
 # ollama pull した VLM のタグ名（例: qwen2.5vl:3b, moondream, llava）
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2.5vl:3b")
-# Piperの音声モデル(.onnx)へのパス
-PIPER_MODEL = os.environ.get("PIPER_MODEL", "/models/en_US-lessac-medium.onnx")
 
 PROMPT = (
     "Read the text visible in this image exactly as written. "
@@ -29,17 +27,6 @@ def extract_text(image_bytes: bytes) -> str:
         }],
     )
     return response["message"]["content"].strip()
-
-
-def speak(text: str) -> None:
-    with tempfile.NamedTemporaryFile(suffix=".wav") as audio_file:
-        subprocess.run(
-            ["piper", "--model", PIPER_MODEL, "--output_file", audio_file.name],
-            input=text.encode("utf-8"),
-            check=True,
-        )
-        # macOSには aplay(ALSA) がないため afplay を使用
-        subprocess.run(["afplay", audio_file.name], check=True)
 
 
 @app.route("/process", methods=["POST"])

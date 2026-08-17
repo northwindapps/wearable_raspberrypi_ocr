@@ -1,5 +1,6 @@
 import cv2
 import os
+import threading
 import time
 import requests
 
@@ -12,6 +13,17 @@ IMAGE_PATH = os.path.join(SAVE_DIR, "current_frame.jpg")
 
 # OCR/TTSを行うリモートデバイスのエンドポイント（環境変数で上書き可能）
 REMOTE_ENDPOINT = os.environ.get("PROCESS_ENDPOINT", "http://192.168.237.57:5001/process")
+
+
+def send_frame(image_bytes, distance_m):
+    # カメラループをブロックしないよう別スレッドで送信
+    try:
+        files = {'imagefile': ('current_frame.jpg', image_bytes, 'image/jpeg')}
+        payload = {'distance': distance_m}
+        response = requests.post(REMOTE_ENDPOINT, files=files, data=payload, timeout=5)
+        print(f"Server response: {response.status_code}")
+    except Exception as e:
+        print(f"Upload failed: {e}")
 
 
 def camera_process():
@@ -74,14 +86,12 @@ def camera_process():
             cv2.imwrite(IMAGE_PATH, frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             last_save_time = current_time
 
-            try:
-                with open(IMAGE_PATH, 'rb') as f:
-                    files = {'imagefile': f}
-                    payload = {'distance': distance_m}
-                    response = requests.post(REMOTE_ENDPOINT, files=files, data=payload, timeout=5)
-                    print(f"Server response: {response.status_code}")
-            except Exception as e:
-                print(f"Upload failed: {e}")
+            # HTTP送信はカメラループをブロックしないよう非同期で実行
+            success, encoded = cv2.imencode('.jpg', frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            if success:
+                threading.Thread(
+                    target=send_frame, args=(encoded.tobytes(), distance_m), daemon=True
+                ).start()
 
             # CPU負荷を抑えるための微小なスリープ
             time.sleep(0.05)

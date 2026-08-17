@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import requests
+from collections import deque
 
 # 保存ディレクトリ作成
 SAVE_DIR = "/dev/shm/captured_images"
@@ -13,6 +14,11 @@ IMAGE_PATH = os.path.join(SAVE_DIR, "current_frame.jpg")
 
 # OCR/TTSを行うリモートデバイスのエンドポイント（環境変数で上書き可能）
 REMOTE_ENDPOINT = os.environ.get("PROCESS_ENDPOINT", "http://192.168.237.57:5001/process")
+
+# 同一ページの重複送信を避けるための、レンズ位置(ピント距離)の判定パラメータ
+LENS_HISTORY_SIZE = 5        # 直近何フレーム分のレンズ位置を見て「静止」を判定するか
+LENS_STABLE_THRESHOLD = 0.05  # この範囲内のブレなら「静止」とみなす
+LENS_SAME_PAGE_THRESHOLD = 0.05  # 前回送信時との差がこの範囲内なら「同じページ」とみなしスキップ
 
 
 def send_frame(image_bytes, distance_m):
@@ -49,6 +55,8 @@ def camera_process():
     print("InnoMaker IMX708 Camera Active (AF-Continuous)...")
 
     last_save_time = time.time()
+    lens_history = deque(maxlen=LENS_HISTORY_SIZE)
+    last_sent_lens_pos = None
 
     try:
         while True:
@@ -79,12 +87,31 @@ def camera_process():
                 last_save_time = current_time
                 continue
 
+            # 4. レンズ位置の履歴を更新し、カメラが静止しているか判定
+            lens_history.append(current_lens_pos)
+            last_save_time = current_time
+
+            if len(lens_history) < LENS_HISTORY_SIZE:
+                # 履歴が十分に溜まるまで（静止確認中）は送信しない
+                continue
+
+            lens_spread = max(lens_history) - min(lens_history)
+            if lens_spread > LENS_STABLE_THRESHOLD:
+                # まだカメラが動いている（ブレ画像を避けるため待機）
+                continue
+
+            if (last_sent_lens_pos is not None
+                    and abs(current_lens_pos - last_sent_lens_pos) < LENS_SAME_PAGE_THRESHOLD):
+                # 前回送信時とほぼ同じ位置 → 同じページとみなしスキップ
+                print(f"Skipping: Same page as last sent (distance: {distance_m:.2f})")
+                continue
+
             print(f"Target detected: {distance_m:.2f}メートル")
 
             # --- 保存・送信処理 ---
             frame_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
             cv2.imwrite(IMAGE_PATH, frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-            last_save_time = current_time
+            last_sent_lens_pos = current_lens_pos
 
             # HTTP送信はカメラループをブロックしないよう非同期で実行
             success, encoded = cv2.imencode('.jpg', frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])

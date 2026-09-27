@@ -1,5 +1,5 @@
 // ==========================================
-// Raspberry Pi Zero 2 W - Bento Box (Top Cover) - Final Fixed Ver.
+// Raspberry Pi Zero 2 W - Bento Box (Top Cover) - Error Fixed Ver.
 // ==========================================
 
 // --- Raspberry Pi Zero 2 W 基本サイズ ---
@@ -7,19 +7,27 @@ pi_w = 69.0; // SDカードの2mmはみ出しを含めた調整値
 pi_d = 30.0; 
 
 // --- ケースの基本設定 ---
-thickness = 1.0;    // テスト用の壁の厚み (1.0mm)
-clearance = 1.0;    // 基板とケース内壁の隙間
-cover_h   = 1.5;    // 【修正】内部部品と干渉しないようインロー高さを1.5mmに最適化
+thickness       = 1.0;    // 周囲の壁の厚み (1.0mm)
+clearance       = 1.0;    // 基板とケース内壁の隙間
+cover_thickness = 3.0;    // 蓋の天面プレート自体の厚み (3.0mm)
+cover_h         = 1.5;    // 内部部品と干渉しないようインロー高さを1.5mmに最適化
 
 // 内寸と外寸の計算
 inner_w = pi_w + (clearance * 2);
 inner_d = pi_d + (clearance * 2);
 outer_w = inner_w + (thickness * 2);
-outer_d = inner_d + (thickness * 2);
+outer_d = inner_d + (thickness * 2); // 正確に 34.0mm に固定
+
+// 🔩 反対側（奥側）のフチから手前に向かって「9.0mm」離した位置（Y=25.0）に固定
+bracket_y = 25.0; 
+
+bracket_screw_pass_r = 1.1; // M2ネジ用 (直径2.2mmの穴)
+
+$fn = 32;
 
 // --- メインレンダリング ---
-// 【修正】180度反転させたときにベッド（床）の上に正しく接地するように座標修正
-translate([0, outer_d, thickness])
+// 🛠️【バグ修正】引数を [180, 0, 0] に修正し、ベッド（床）の上に正しく接地させます
+translate([0, outer_d, cover_thickness])
     rotate([180, 0, 0])
         top_cover();
 
@@ -30,11 +38,11 @@ module top_cover() {
     
     difference() {
         union() {
-            // 蓋の天面プレート
-            cube([outer_w, outer_d, thickness]);
+            // 1. 蓋の天面プレート（厚み3.0mm）
+            cube([outer_w, outer_d, cover_thickness]);
             
-            // 凹凸の噛み合わせ（インロー固定部）
-            translate([thickness + fit_gap, thickness + fit_gap, thickness])
+            // 2. 凹凸の噛み合わせ（インロー固定部）
+            translate([thickness + fit_gap, thickness + fit_gap, cover_thickness])
                 difference() {
                     cube([inner_w - (fit_gap * 2), inner_d - (fit_gap * 2), cover_h]);
                     
@@ -48,19 +56,37 @@ module top_cover() {
                 }
         }
         
-        // ✂️ 【重要追加】ボトム側の左右21mm窓と干渉するインローの壁をカットする処理
-        // 左側のインローを逃がす（21mm窓に連動）
-        translate([thickness, outer_d/2 - 11.5, thickness - 0.5])
+        // ✂️ ボトム側の左右21mm窓と干渉するインローの壁をカットする処理
+        translate([thickness, outer_d/2 - 11.5, cover_thickness - 0.5])
             cube([lip_thickness + 1, 23, cover_h + 1]);
             
-        // 右側のインローを逃がす（21mm窓に連動）
-        translate([outer_w - thickness - lip_thickness - 1, outer_d/2 - 11.5, thickness - 0.5])
+        translate([outer_w - thickness - lip_thickness - 1, outer_d/2 - 11.5, cover_thickness - 0.5])
             cube([lip_thickness + 2, 23, cover_h + 1]);
+
+        // 🔩 3mmの天面からインロー頂点までを完全に撃ち抜く貫通ネジ穴
+        // X = 7.0mm と 16.0mm、Y = 25.0mm の正しいブラケットピッチ位置
+        translate([0, 0, -0.5]) {
+            bracket_mount_hole(7.0, bracket_y);
+            bracket_mount_hole(16.0, bracket_y);
+        }
 
         // 放熱用のスリット穴
         for (i = [0 : 5]) {
             translate([outer_w / 2 - 15 + (i * 5), outer_d / 2 - 10, -0.5])
-                cube([2, 20, thickness + 1]);
+                cube([2, 20, cover_thickness + cover_h + 1.0]);
         }
+    }
+}
+
+// ネジ穴と皿モミ加工モジュール
+module bracket_mount_hole(x, y) {
+    translate([x, y, 0]) {
+        // M2ネジ用の全貫通穴
+        cylinder(r = bracket_screw_pass_r, h = cover_thickness + cover_h + 2.0);
+        
+        // ネジ頭用の皿モミ（深さ1.2mm、直径3.6mm）
+        // 反転接地時の外面側（Z=0の底側）からきれいに掘り下げるように修正
+        translate([0, 0, -0.1])
+            cylinder(r = 1.8, h = 1.3);
     }
 }

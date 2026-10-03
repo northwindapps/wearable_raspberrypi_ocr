@@ -27,11 +27,15 @@ bracket_screw_pass_r = 1.1; // M2ネジ用 (直径2.2mmの穴)
 gpio_w   = 62.0; // 窓の長さ (X軸方向)
 gpio_d   = 6.5;  // 窓の幅 (Y軸方向)
 
-$fn = 32;
+// 🎤 マイク穴の設定
+mic_dia = 12.3;
+mic_r   = mic_dia / 2;
+mic_x   = outer_w / 2.6;  // X軸の中央に配置
+mic_y   = 19.5;         // GPIOスリット(Y=2.0~8.5)とネジ穴(Y=25.0)の間に配置
+
+$fn = 64; // 円をより滑らかにするために32から64に変更
 
 // --- メインレンダリング ---
-// 🛠️【エラー修正】エラーの原因だった空のrotate()を完全にカットしました。
-// 3Dプリンターベッドの上に正しく接地するように座標修正のみを行います。
 translate([0, outer_d, cover_thickness])
     top_cover();
 
@@ -74,10 +78,13 @@ module top_cover() {
             bracket_mount_hole(16.0, bracket_y);
         }
 
-        // 📌 🛠️【位置確定】GPIOスリット窓を「手前フチ（Y=2.0）」へ完全に移動
-        // 天面からインローの壁まで一気に貫通させます
+        // 📌 GPIOスリット窓を手前フチ（Y=2.0）に配置
         translate([thickness + clearance + 3.5, 2.0, -0.5])
             cube([gpio_w, gpio_d, cover_thickness + cover_h + 1.0]);
+
+        // 🎤 マイク用貫通穴
+        translate([mic_x, mic_y, -0.5])
+            cylinder(r = mic_r, h = cover_thickness + cover_h + 1.0);
     }
 }
 
@@ -88,7 +95,6 @@ module bracket_mount_hole(x, y) {
         cylinder(r = bracket_screw_pass_r, h = cover_thickness + cover_h + 2.0);
         
         // ネジ頭用の皿モミ（深さ1.2mm、直径3.6mm）
-        // プレートの外面側（Z=0の底側）からきれいに掘り下げるように修正
         translate([0, 0, -0.1])
             cylinder(r = 1.8, h = 1.3);
     }

@@ -16,3 +16,21 @@ sudo reboot
 
 // preview (after reboot)
 libcamera-hello -t 0
+
+// SSH drops ("Connection reset by peer") -> WiFi power save was on (not power / not crash)
+vcgencmd get_throttled          # 0x0 = power OK
+journalctl --list-boots         # check if Pi rebooted
+iw wlan0 get power_save         # "on" causes WiFi drops on Zero 2
+
+// disable WiFi power save permanently
+sudo nmcli connection modify "netplan-wlan0-Galaxy_5GMW_9128" 802-11-wireless.powersave 2
+sudo nmcli connection up "netplan-wlan0-Galaxy_5GMW_9128"
+iw wlan0 get power_save         # should say: off
+  - temporary only (until reboot): sudo iw wlan0 set power_save off
+  - Galaxy hotspot may also drop if phone sleeps / battery saver -> keep phone plugged in
+
+// run app in tmux so it survives SSH disconnect
+tmux new -s app
+python app_shoot.py
+  - detach: Ctrl-b then d
+  - reattach: tmux attach -t app

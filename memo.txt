@@ -1,2 +1,18 @@
 ssh {username}@raspberrypi.local
 scp -r /Users/{username}/Documents/wearable_raspberrypi_ocr/* {username}@raspberrypi.local:~/Documents/camera_api/
+
+arecord -D hw:1,0 -c 2 -r 48000 -f S32_LE -d 5 test.wav
+hexdump -n 500 test_check.wav
+
+//PC
+ scp {username}@raspberrypi.local:~/test_check.wav ~/Desktop/
+
+// Camera (IMX708) setup
+sudo nano /boot/firmware/config.txt
+  - change  camera_auto_detect=1  ->  camera_auto_detect=0
+  - add to the last line:
+      dtoverlay=imx708
+sudo reboot
+
+// preview (after reboot)
+libcamera-hello -t 0

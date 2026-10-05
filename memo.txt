@@ -34,3 +34,6 @@ tmux new -s app
 python app_shoot.py
   - detach: Ctrl-b then d
   - reattach: tmux attach -t app
+
+// copy file from desktop to raspberrypi
+scp /Users/yano/Documents/wearable_raspberrypi_ocr/app_shoot.py yano@raspberrypi.local:~/             

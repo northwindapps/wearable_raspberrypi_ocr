@@ -51,13 +51,15 @@ def wav_header(rate, data_size=0xFFFFFFFF - 36):
 @app.route('/api/audio/stream', methods=['GET'])
 def audio_stream():
     # 16kHz mono int16 の生PCMを流し続ける (?format=wav でWAVヘッダ付き)
+    # generate() はリクエスト終了後に実行されるので、request はここで先に読んでおく
+    want_wav = request.args.get("format") == "wav"
     q = queue.Queue(maxsize=50)
     with subscribers_lock:
         subscribers.append(q)
 
     def generate():
         try:
-            if request.args.get("format") == "wav":
+            if want_wav:
                 yield wav_header(TARGET_RATE)
             while True:
                 yield q.get()

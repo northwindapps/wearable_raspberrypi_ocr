@@ -19,7 +19,7 @@ TARGET_RATE = 16000                  # iOS 側のウェイクワード検出用 
 DECIMATE = HW_RATE // TARGET_RATE    # 3
 CHUNK = 1280                         # 16kHz で 80ms
 CHUNK_BYTES = CHUNK * DECIMATE * HW_CHANNELS * 4  # S32_LE = 4 bytes
-GAIN = 4.0                           # 音が小さい場合は上げる (ログに CLIPPING が出たら下げる)
+GAIN = 10.0                           # 音が小さい場合は上げる (ログに CLIPPING が出たら下げる)
 BUFFER_SECONDS = 10                  # 直近何秒分を保持するか
 LOG_SECONDS = 5                      # 何秒ごとに音量ログを出すか
 

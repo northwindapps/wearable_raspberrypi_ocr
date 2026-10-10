@@ -101,6 +101,16 @@ def capture():
     return Response(buf.tobytes(), mimetype="image/jpeg")
 
 
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown():
+    # Pi をシャットダウン (レスポンスを返してから halt するため少し遅らせる)
+    def do_halt():
+        time.sleep(1)
+        subprocess.run(["sudo", "halt"])
+    threading.Thread(target=do_halt, daemon=True).start()
+    return {"status": "ok", "message": "Shutting down"}
+
+
 def to_16k_mono(raw):
     # S32_LE 2ch 48kHz -> int16 mono 16kHz
     samples = np.frombuffer(raw, dtype='<i4').reshape(-1, HW_CHANNELS)

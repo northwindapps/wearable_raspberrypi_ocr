@@ -9,7 +9,7 @@ pi_h = 1.6;
 thickness       = 1.0;    // 周囲の壁の厚み (1.0mm)
 floor_thickness = 3.0;    // ボックス本体の底面プレートの厚み (3.0mm)
 clearance       = 1.0;    // 基板とケース内壁の隙間
-box_h           = 9.5;    // 全高 (内部コンポーネント空間5.5mmをキープ)
+box_h           = 11.5;    // 全高 (内部コンポーネント空間5.5mmをキープ)
 
 inner_w = 69.0 + (clearance * 2); 
 inner_d = pi_d + (clearance * 2);

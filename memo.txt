@@ -36,4 +36,37 @@ python app_shoot.py
   - reattach: tmux attach -t app
 
 // copy file from desktop to raspberrypi
-scp /Users/yano/Documents/wearable_raspberrypi_ocr/app_shoot.py yano@raspberrypi.local:~/             
+scp /Users/yano/Documents/wearable_raspberrypi_ocr/app_shoot.py yano@raspberrypi.local:~/      
+
+
+// systemctl setting. service.file
+
+```
+sudo nano /etc/systemd/system/glasses.service
+```
+
+```
+[Unit]
+Description=Smart glasses camera/audio API (app_shoot.py)
+After=network.target sound.target
+
+[Service]
+User=yano
+WorkingDirectory=/home/yano
+ExecStart=/usr/bin/python3 /home/yano/app_shoot.py
+Restart=always
+RestartSec=3
+# print() output shows up in the logs right away
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+
+```
+
+// Day-to-day commands
+systemctl status glasses          # running? last few log lines
+journalctl -u glasses -f          # live logs (replaces watching tmux)
+sudo systemctl restart glasses    # after you scp a new app_shoot.py
+sudo systemctl stop glasses       # stop it (it comes back on next boot)
+sudo systemctl disable glasses    # stop starting at boot

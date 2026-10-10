@@ -95,6 +95,7 @@ def capture():
     with camera_lock:
         frame_rgb = picam2.capture_array()
     frame_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
+    frame_gray = cv2.rotate(frame_gray, cv2.ROTATE_90_COUNTERCLOCKWISE)   # カメラの取り付け向きを補正 (左に 90°)
     ok, buf = cv2.imencode(".jpg", frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
     if not ok:
         return {"status": "error", "message": "Encode failed"}, 500

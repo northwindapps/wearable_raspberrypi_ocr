@@ -5,6 +5,8 @@ Say **"hey glasses, what does this say?"** and the paired iPhone app takes a pho
 
 ![Assembled prototype](IMG_2284.jpg)
 
+**Demo video:** https://youtube.com/shorts/n7kPj4O048o
+
 This repository is the **Raspberry Pi side** (server + 3D-printed enclosure).
 The iPhone app is here: **[northwindapps/smartglasses_app](https://github.com/northwindapps/smartglasses_app)**
 

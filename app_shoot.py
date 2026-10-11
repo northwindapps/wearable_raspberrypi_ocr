@@ -11,19 +11,19 @@ from flask import Flask, Response, send_file, request
 
 app = Flask(__name__)
 
-# --- マイク設定 (Google Voice HAT) ---
+# --- Microphone settings (Google Voice HAT) ---
 ALSA_DEVICE = "plughw:CARD=sndrpigooglevoi,DEV=0"
 HW_RATE = 48000
 HW_CHANNELS = 2
-TARGET_RATE = 16000                  # iOS 側のウェイクワード検出用 16kHz / mono / int16
+TARGET_RATE = 16000                  # 16kHz / mono / int16 for wake-word detection on iOS
 DECIMATE = HW_RATE // TARGET_RATE    # 3
-CHUNK = 1280                         # 16kHz で 80ms
+CHUNK = 1280                         # 80ms at 16kHz
 CHUNK_BYTES = CHUNK * DECIMATE * HW_CHANNELS * 4  # S32_LE = 4 bytes
-GAIN = 10.0                           # 音が小さい場合は上げる (ログに CLIPPING が出たら下げる)
-BUFFER_SECONDS = 10                  # 直近何秒分を保持するか
-LOG_SECONDS = 5                      # 何秒ごとに音量ログを出すか
+GAIN = 10.0                           # Raise if audio is too quiet (lower if CLIPPING appears in logs)
+BUFFER_SECONDS = 10                  # How many recent seconds of audio to keep
+LOG_SECONDS = 5                      # Interval (seconds) for volume logging
 
-# 直近の音声 (リングバッファ) と ストリーミング中のクライアント
+# Recent audio (ring buffer) and currently streaming clients
 audio_buffer = np.zeros(0, dtype=np.int16)
 buffer_lock = threading.Lock()
 subscribers = []
@@ -31,7 +31,7 @@ subscribers_lock = threading.Lock()
 
 
 def wav_header(rate, data_size=0xFFFFFFFF - 36):
-    # ストリーミング用: サイズ不明なので最大値を入れる
+    # For streaming: size is unknown, so use the max value
     buf = io.BytesIO()
     buf.write(b"RIFF")
     buf.write((data_size + 36).to_bytes(4, "little"))
@@ -50,8 +50,8 @@ def wav_header(rate, data_size=0xFFFFFFFF - 36):
 
 @app.route('/api/audio/stream', methods=['GET'])
 def audio_stream():
-    # 16kHz mono int16 の生PCMを流し続ける (?format=wav でWAVヘッダ付き)
-    # generate() はリクエスト終了後に実行されるので、request はここで先に読んでおく
+    # Continuously stream raw 16kHz mono int16 PCM (?format=wav adds a WAV header)
+    # generate() runs after the request context ends, so read request args here first
     want_wav = request.args.get("format") == "wav"
     q = queue.Queue(maxsize=50)
     with subscribers_lock:
@@ -72,7 +72,7 @@ def audio_stream():
 
 @app.route('/api/audio', methods=['GET'])
 def get_audio():
-    # 直近 N 秒を WAV で返す (ポーリング用)  例: /api/audio?seconds=2
+    # Return the last N seconds as WAV (for polling)  e.g. /api/audio?seconds=2
     seconds = min(float(request.args.get("seconds", 2)), BUFFER_SECONDS)
     with buffer_lock:
         pcm = audio_buffer[-int(seconds * TARGET_RATE):].copy()
@@ -89,13 +89,13 @@ def get_audio():
 
 @app.route('/api/capture', methods=['POST', 'GET'])
 def capture():
-    # iOS がウェイクワードを検出したら呼ぶ → その場で撮影して JPEG を返す
+    # Called by iOS when the wake word is detected -> capture a photo and return JPEG
     if picam2 is None:
         return {"status": "error", "message": "Camera not ready"}, 503
     with camera_lock:
         frame_rgb = picam2.capture_array()
     frame_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
-    frame_gray = cv2.rotate(frame_gray, cv2.ROTATE_90_COUNTERCLOCKWISE)   # カメラの取り付け向きを補正 (左に 90°)
+    frame_gray = cv2.rotate(frame_gray, cv2.ROTATE_90_COUNTERCLOCKWISE)   # Correct for camera mounting orientation (rotate 90° left)
     ok, buf = cv2.imencode(".jpg", frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
     if not ok:
         return {"status": "error", "message": "Encode failed"}, 500
@@ -104,7 +104,7 @@ def capture():
 
 @app.route('/api/shutdown', methods=['POST'])
 def shutdown():
-    # Pi をシャットダウン (レスポンスを返してから halt するため少し遅らせる)
+    # Shut down the Pi (delay slightly so the response is sent before halting)
     def do_halt():
         time.sleep(1)
         subprocess.run(["sudo", "halt"])
@@ -115,20 +115,20 @@ def shutdown():
 def to_16k_mono(raw):
     # S32_LE 2ch 48kHz -> int16 mono 16kHz
     samples = np.frombuffer(raw, dtype='<i4').reshape(-1, HW_CHANNELS)
-    mono = samples.astype(np.float32).mean(axis=1) / 65536.0  # 上位16bit相当
+    mono = samples.astype(np.float32).mean(axis=1) / 65536.0  # Equivalent to the upper 16 bits
     n = len(mono) // DECIMATE * DECIMATE
-    mono = mono[:n].reshape(-1, DECIMATE).mean(axis=1)        # 簡易ローパス + 間引き
+    mono = mono[:n].reshape(-1, DECIMATE).mean(axis=1)        # Simple low-pass + decimation
     return np.clip(mono * GAIN, -32768, 32767).astype(np.int16)
 
 
-# --- カメラ ---
+# --- Camera ---
 picam2 = None
 camera_lock = threading.Lock()
 
 
 def init_camera():
     global picam2
-    # picamera2のインポート（実行時に読み込み）
+    # Import picamera2 lazily (loaded at runtime)
     from picamera2 import Picamera2
     cam = Picamera2()
     config = cam.create_preview_configuration(
@@ -137,8 +137,8 @@ def init_camera():
     cam.configure(config)
     cam.start()
     cam.set_controls({
-        "AfMode": 2,          # オートフォーカス常時
-        "AwbMode": 1,         # 1 = Incandescent (電球色/暖かい光)
+        "AfMode": 2,          # Continuous autofocus
+        "AwbMode": 1,         # 1 = Incandescent (warm light)
         "Saturation": 1.0
     })
     picam2 = cam
@@ -157,7 +157,7 @@ def audio_process():
 
     max_samples = BUFFER_SECONDS * TARGET_RATE
     log_samples = LOG_SECONDS * TARGET_RATE
-    block = []    # ログ用: 直近5秒分
+    block = []    # For logging: last 5 seconds
     try:
         while True:
             raw = proc.stdout.read(CHUNK_BYTES)
@@ -176,10 +176,10 @@ def audio_process():
                     try:
                         q.put_nowait(data)
                     except queue.Full:
-                        pass  # 遅いクライアントは取りこぼす (マイクは止めない)
+                        pass  # Drop data for slow clients (never block the mic)
                 n_clients = len(subscribers)
 
-            # --- 5秒ごとにログ ---
+            # --- Log every 5 seconds ---
             block.append(pcm)
             if sum(len(b) for b in block) >= log_samples:
                 x = np.concatenate(block).astype(np.float32)
@@ -197,12 +197,12 @@ def audio_process():
 
 
 if __name__ == "__main__":
-    # 0. カメラ起動
+    # 0. Start the camera
     init_camera()
 
-    # 1. 音声処理を別スレッドで開始
+    # 1. Start audio processing in a separate thread
     thread = threading.Thread(target=audio_process, daemon=True)
     thread.start()
 
-    # 2. Flaskサーバーを起動 (iOSアプリからアクセスできるように host='0.0.0.0' にする)
+    # 2. Start the Flask server (host='0.0.0.0' so the iOS app can access it)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

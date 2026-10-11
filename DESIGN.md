@@ -58,9 +58,9 @@ Single process `app_shoot.py`: Flask HTTP server on port 5000 (`threaded=True`),
 
 ### P-2. Shoot camera
 
-- Picamera2, 1280×960 RGB, continuous autofocus, AWB = Incandescent.
+- Picamera2, 2304×1296 RGB (2x2 binned sensor mode, full field of view), continuous autofocus, AWB = Incandescent.
 - On request: capture a frame, convert it to grayscale, rotate it 90° to the left to correct the mounting
-  angle, and encode it as JPEG (quality 90).
+  angle, and encode it as JPEG (quality 95).
 - A camera lock makes sure only one capture runs at a time.
 
 | Endpoint       | Method     | Response                                   |
@@ -86,7 +86,7 @@ Single process `app_shoot.py`: Flask HTTP server on port 5000 (`threaded=True`),
 
 ## 4. LLM Agent App Part — Features
 
-SwiftUI iPhone app. Files: `ContentView.swift`, `SettingsView.swift`, `ChatStore.swift`, `WakeWordListener.swift`.
+SwiftUI iPhone app. Files: `ContentView.swift`, `SettingsView.swift`, `ChatStore.swift`, `WakeWordListener.swift`, `TextRecognizer.swift`.
 
 ### A-1. Configuration
 
@@ -100,11 +100,12 @@ Saved in UserDefaults (prototype; the API key should move to the Keychain).
 | Wake word      | `wake_word`      | `hey glasses`            |
 | Speech language | `speech_locale` | `en-US` (`ja-JP` available) |
 | Listening on/off | `listening`    | on                       |
+| OCR language   | `ocr_language`   | `en-US` (`ja-JP`, `zh-Hans`, `de-DE`, `fr-FR`, `es-ES`) |
 
 ### A-2. Chat
 
 - Message list with text and an optional image; replies are streamed from OpenAI Chat Completions (SSE).
-- Images are sent as base64 JPEG data URLs.
+- Images are sent as base64 JPEG data URLs with `detail: high`.
 - The system prompt explains the glasses context (grayscale camera, transcripts that start with the wake word).
 - Glasses button = manual capture; the photo is attached to the next message. Also: Stop, New Chat.
 - Errors are shown in an alert.
@@ -118,11 +119,22 @@ Saved in UserDefaults (prototype; the API key should move to the Keychain).
 
 | Utterance                                  | Action                                         |
 |--------------------------------------------|------------------------------------------------|
-| `<wake word>` + anything                   | Capture a photo, then send it with the sentence to the LLM |
+| `<wake word>` + anything                   | Capture a photo and put it with the sentence in the composer; the user taps Send |
 | `<wake word>` + only `halt` / `stop` / `shut down` / `power off` | Call `/api/shutdown`          |
 
 - Listening runs only while the app is in the foreground.
 - Reconnect: the stream times out after 10 seconds without data, and the app retries every 2 seconds.
+
+### A-4. OCR (text recognition) — supplement
+
+- Runs on the phone with Apple Vision (`RecognizeTextRequest`, accurate level, language correction) right after
+  each capture; nothing extra leaves the phone.
+- Languages: English (default), Japanese, Chinese (Simplified), German, French, Spanish. English is always added as a
+  second language so mixed text still reads.
+- The recognized text is shown next to the photo in the composer and under the photo in the chat, and is sent to the
+  LLM as an extra text part ("OCR text from the image (may contain errors)"). The system prompt says to trust the
+  image if the two disagree.
+- If OCR fails, the photo is still attached.
 
 ## 5. Non-functional — supplement
 

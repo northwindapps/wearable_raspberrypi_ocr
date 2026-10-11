@@ -1,5 +1,7 @@
+import concurrent.futures
 import cv2
 import io
+import os
 import queue
 import threading
 import time
@@ -92,10 +94,18 @@ def capture():
     if picam2 is None:
         return {"status": "error", "message": "Camera not ready"}, 503
     with camera_lock:
-        frame_rgb = picam2.capture_array()
+        # capture_array() blocks forever if the camera stops sending frames (loose cable etc.)
+        future = capture_executor.submit(picam2.capture_array)
+        try:
+            frame_rgb = future.result(timeout=CAPTURE_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            # Exit so systemd (Restart=always) restarts the service and re-opens the camera
+            print(f"[camera] no frame for {CAPTURE_TIMEOUT}s -> exiting so systemd restarts the camera")
+            threading.Timer(0.5, lambda: os._exit(1)).start()
+            return {"status": "error", "message": "Camera not responding, restarting"}, 503
     frame_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
     frame_gray = cv2.rotate(frame_gray, cv2.ROTATE_90_COUNTERCLOCKWISE)   # Correct for camera mounting orientation (rotate 90° left)
-    ok, buf = cv2.imencode(".jpg", frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    ok, buf = cv2.imencode(".jpg", frame_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     if not ok:
         return {"status": "error", "message": "Encode failed"}, 500
     return Response(buf.tobytes(), mimetype="image/jpeg")
@@ -123,6 +133,8 @@ def to_16k_mono(raw):
 # --- Camera ---
 picam2 = None
 camera_lock = threading.Lock()
+capture_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+CAPTURE_TIMEOUT = 5   # seconds to wait for a frame before giving up
 
 
 def init_camera():
@@ -130,8 +142,9 @@ def init_camera():
     # Import picamera2 lazily (loaded at runtime)
     from picamera2 import Picamera2
     cam = Picamera2()
+    # IMX708 2x2 binned mode: full field of view at 2304x1296 (full-res 4608x2592 is too heavy for the Zero 2 W)
     config = cam.create_preview_configuration(
-        main={"format": "RGB888", "size": (1280, 960)}
+        main={"format": "RGB888", "size": (2304, 1296)}
     )
     cam.configure(config)
     cam.start()

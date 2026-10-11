@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 captured_images/
 speech.mp3
+video_script.txt

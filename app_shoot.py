@@ -1,5 +1,4 @@
 import cv2
-import os
 import io
 import queue
 import threading
